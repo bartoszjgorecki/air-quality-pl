@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/">
+    <file>qml/main.qml</file>
+    <file>qml/ui/GlassCard.qml</file>
+    <file>qml/ui/GlassButton.qml</file>
+  </qresource>
+</RCC>
