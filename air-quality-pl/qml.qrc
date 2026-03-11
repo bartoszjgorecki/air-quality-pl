@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/">
+    <!-- Zasoby QML ładowane przez główną aplikację. -->
+    <file>qml/main.qml</file>
+    <file>qml/ui/GlassCard.qml</file>
+    <file>qml/ui/GlassButton.qml</file>
+  </qresource>
+</RCC>
