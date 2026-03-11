@@ -120,12 +120,6 @@ Items that depend on the environment rather than only on code:
 - pollutant labels are normalized to English for the UI, but raw GIOS payloads may still contain localized source names in debug dumps
 - Doxygen configuration is included, but `doxygen` is not bundled with the project
 
-## Additional Documentation
-
-- a detailed Polish project description is available in [`docs/opis_projektu.md`](docs/opis_projektu.md)
-- simplified intermediate versions are available in:
-  - [`podprojekty/projekt1_przycisk`](podprojekty/projekt1_przycisk)
-  - [`podprojekty/projekt2_stacje_dane`](podprojekty/projekt2_stacje_dane)
 
 ## Run Tests
 
