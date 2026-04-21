@@ -96,10 +96,17 @@ AppController::AppController(QObject* parent)
     setOffline(true);
     setBanner("Offline: local database ready");
 
-    // Jeśli mamy już zapisane stacje, pokazujemy je od razu po starcie,
+    // Czyścimy stare wpisy stacji, które kiedyś mogły zostać zapisane zbiorczo
+    // z API, ale nie mają żadnych sensorów i nie są użyteczne offline.
+    QString pruneErr;
+    if (!m_db.pruneStationsWithoutCachedSensors(&pruneErr)) {
+      setBanner("Offline: local database ready, but offline station cleanup failed: " + pruneErr);
+    }
+
+    // Jeśli mamy już zapisane stacje offline, pokazujemy je od razu po starcie,
     // nawet zanim użytkownik kliknie przycisk pobierania.
     QString cachedStationsErr;
-    const QVariantList cachedStations = m_db.loadStations(&cachedStationsErr);
+    const QVariantList cachedStations = m_db.loadOfflineStations(&cachedStationsErr);
     if (cachedStationsErr.isEmpty() && !cachedStations.isEmpty()) {
       m_stations = cachedStations;
       setBanner("Offline: loaded " + QString::number(m_stations.size())
@@ -121,13 +128,7 @@ AppController::AppController(QObject* parent)
       setOffline(false);
       m_pendingRequest = PendingRequest::None;
       m_pendingStationId = -1;
-
-      QString cacheErr;
-      if (!m_db.replaceStations(m_stations, &cacheErr)) {
-        setBanner("Online: stations loaded, but station cache update failed: " + cacheErr);
-      } else {
-        setBanner("Online: stations loaded");
-      }
+      setBanner("Online: stations loaded");
     } catch (const std::exception& ex) {
       m_pendingRequest = PendingRequest::None;
       m_pendingStationId = -1;
@@ -151,8 +152,26 @@ AppController::AppController(QObject* parent)
       m_pendingStationId = -1;
 
       QString cacheErr;
-      if (stationId > 0 && !m_db.upsertSensorsForStation(stationId, m_sensors, &cacheErr)) {
-        setBanner("Online: sensors loaded, but sensor cache update failed: " + cacheErr);
+      bool cacheOk = true;
+
+      if (stationId > 0) {
+        QVariantMap stationToStore;
+        for (const auto& stationValue : m_stations) {
+          const auto station = stationValue.toMap();
+          if (station.value("id").toInt() != stationId) continue;
+          stationToStore = station;
+          break;
+        }
+
+        if (!stationToStore.isEmpty() && !m_db.upsertStation(stationToStore, &cacheErr)) {
+          cacheOk = false;
+        } else if (!m_db.upsertSensorsForStation(stationId, m_sensors, &cacheErr)) {
+          cacheOk = false;
+        }
+      }
+
+      if (!cacheOk) {
+        setBanner("Online: sensors loaded, but offline cache update failed: " + cacheErr);
       } else {
         setBanner("Online: sensors loaded");
       }
@@ -491,7 +510,7 @@ void AppController::refreshChartRangeMaxDays() {
 // Próbuje podmienić listę stacji na ostatnią migawkę zapisaną lokalnie.
 bool AppController::loadStationsFromLocalCache(const QString& failureReason) {
   QString err;
-  const QVariantList cachedStations = m_db.loadStations(&err);
+  const QVariantList cachedStations = m_db.loadOfflineStations(&err);
   if (!err.isEmpty()) {
     setOffline(true);
     setBanner("Offline: " + failureReason + ". Local station cache could not be read: " + err);

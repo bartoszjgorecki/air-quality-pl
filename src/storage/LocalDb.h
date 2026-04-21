@@ -3,6 +3,7 @@
 #include <QVector>
 #include <QDateTime>
 #include <QVariantList>
+#include <QVariantMap>
 #include "../model/Types.h"
 
 /**
@@ -26,9 +27,18 @@ public:
    */
   QVariantList loadStations(QString* err) const;
   /**
+   * Wczytuje tylko te stacje, które naprawdę nadają się do pracy offline,
+   * czyli mają zapisane sensory w lokalnej bazie.
+   */
+  QVariantList loadOfflineStations(QString* err) const;
+  /**
    * Podmienia zapisaną listę stacji na najnowszą migawkę pobraną online.
    */
   bool replaceStations(const QVariantList& stations, QString* err) const;
+  /**
+   * Dodaje lub aktualizuje pojedynczą stację w lokalnej bazie.
+   */
+  bool upsertStation(const QVariantMap& station, QString* err) const;
   /**
    * Wczytuje z lokalnej bazy zapisane sensory dla jednej stacji.
    */
@@ -37,6 +47,11 @@ public:
    * Dodaje lub aktualizuje zapisaną listę sensorów dla wybranej stacji.
    */
   bool upsertSensorsForStation(int stationId, const QVariantList& sensors, QString* err) const;
+  /**
+   * Usuwa ze stacji lokalnych te wpisy, które nie mają zapisanych sensorów
+   * i przez to nie są użyteczne w trybie offline.
+   */
+  bool pruneStationsWithoutCachedSensors(QString* err) const;
 
   /**
    * Wczytuje zapisaną historię sensora z podanego zakresu czasu.

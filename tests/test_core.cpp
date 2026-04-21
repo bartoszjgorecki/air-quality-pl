@@ -37,6 +37,7 @@ private slots:
   void localDbLoadsFullSensorHistory();
   void localDbStoresAndLoadsStationCache();
   void localDbStoresAndLoadsSensorCache();
+  void localDbLoadsOnlyBrowsableOfflineStations();
   void appControllerLoadsCachedStationsAtStartup();
   void localDbReportsInvalidJson();
   void parsersHandleLocalizedStationsPayload();
@@ -257,6 +258,50 @@ void CoreTests::localDbStoresAndLoadsSensorCache() {
   QVERIFY(!err.isEmpty());
 }
 
+void CoreTests::localDbLoadsOnlyBrowsableOfflineStations() {
+  QTemporaryDir tempDir;
+  QVERIFY(tempDir.isValid());
+
+  const QString dbPath = tempDir.filePath("db.json");
+  LocalDb db(dbPath);
+  QString err;
+
+  QVERIFY(db.ensureExists(&err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  QVERIFY(db.upsertStation(QVariantMap{
+    {"id", 1001},
+    {"name", "Poznan, Polanka"},
+    {"city", "Poznan"},
+  }, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  QVERIFY(db.upsertStation(QVariantMap{
+    {"id", 1002},
+    {"name", "Warszawa, Marszalkowska"},
+    {"city", "Warszawa"},
+  }, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  QVariantList sensors;
+  sensors.push_back(QVariantMap{
+    {"id", 958},
+    {"stationId", 1002},
+    {"paramName", "ozon"},
+    {"paramCode", "O3"},
+    {"displayName", "Ozone"},
+    {"paramFormula", "O3"},
+    {"idParam", 7},
+  });
+  QVERIFY(db.upsertSensorsForStation(1002, sensors, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  const auto offlineStations = db.loadOfflineStations(&err);
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+  QCOMPARE(offlineStations.size(), 1);
+  QCOMPARE(offlineStations.first().toMap().value("id").toInt(), 1002);
+}
+
 void CoreTests::appControllerLoadsCachedStationsAtStartup() {
   QTemporaryDir tempDir;
   QVERIFY(tempDir.isValid());
@@ -269,8 +314,7 @@ void CoreTests::appControllerLoadsCachedStationsAtStartup() {
   QVERIFY(db.ensureExists(&err));
   QVERIFY2(err.isEmpty(), qPrintable(err));
 
-  QVariantList stations;
-  stations.push_back(QVariantMap{
+  QVERIFY(db.upsertStation(QVariantMap{
     {"id", 501},
     {"name", "Poznan, Polanka"},
     {"city", "Poznan"},
@@ -278,10 +322,22 @@ void CoreTests::appControllerLoadsCachedStationsAtStartup() {
     {"address", "Polanka 3"},
     {"lat", 52.404f},
     {"lon", 16.953f},
-  });
-
-  QVERIFY(db.replaceStations(stations, &err));
+  }, &err));
   QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  QVariantList sensors;
+  sensors.push_back(QVariantMap{
+    {"id", 701},
+    {"stationId", 501},
+    {"paramName", "ozon"},
+    {"paramCode", "O3"},
+    {"displayName", "Ozone"},
+    {"paramFormula", "O3"},
+    {"idParam", 7},
+  });
+  QVERIFY(db.upsertSensorsForStation(501, sensors, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
   QVERIFY(QDir::setCurrent(tempDir.path()));
 
   {

@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonParseError>
 #include <QMap>
+#include <QSet>
 #include <QSaveFile>
 #include <algorithm>
 
@@ -138,6 +139,50 @@ QVariantList LocalDb::loadStations(QString* err) const {
   return jsonArrayToVariantList(doc.object().value("stations").toArray());
 }
 
+// Wczytuje tylko te stacje, które mają już zapisane sensory i są użyteczne offline.
+QVariantList LocalDb::loadOfflineStations(QString* err) const {
+  QVariantList out;
+  if (err) err->clear();
+
+  QString ensureErr;
+  if (!ensureExists(&ensureErr)) {
+    if (err) *err = ensureErr;
+    return out;
+  }
+
+  QFile f(m_path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = "cannot open db.json";
+    return out;
+  }
+
+  const auto doc = readJsonDocument(f, err);
+  if (!doc.isObject()) {
+    if (err && err->isEmpty()) *err = "db.json is not object";
+    return out;
+  }
+
+  const auto root = doc.object();
+  const auto stations = root.value("stations").toArray();
+  const auto sensors = root.value("sensors").toArray();
+
+  QSet<int> stationIdsWithCachedSensors;
+  for (const auto& value : sensors) {
+    const auto entry = value.toObject();
+    const int stationId = entry.value("stationId").toInt();
+    if (stationId > 0) stationIdsWithCachedSensors.insert(stationId);
+  }
+
+  for (const auto& value : stations) {
+    const auto station = value.toObject();
+    const int stationId = station.value("id").toInt();
+    if (!stationIdsWithCachedSensors.contains(stationId)) continue;
+    out.push_back(station.toVariantMap());
+  }
+
+  return out;
+}
+
 // Podmienia pełną zapisaną listę stacji na najnowszą migawkę pobraną online.
 bool LocalDb::replaceStations(const QVariantList& stations, QString* err) const {
   if (err) err->clear();
@@ -164,6 +209,56 @@ bool LocalDb::replaceStations(const QVariantList& stations, QString* err) const 
 
   auto root = doc.object();
   root["stations"] = variantListToJsonArray(stations);
+  return writeRootObject(m_path, root, err);
+}
+
+// Dodaje albo aktualizuje pojedynczy wpis stacji, aby budować prawdziwą listę offline.
+bool LocalDb::upsertStation(const QVariantMap& station, QString* err) const {
+  if (err) err->clear();
+
+  const int stationId = station.value("id").toInt();
+  if (stationId <= 0) {
+    if (err) *err = "invalid station id";
+    return false;
+  }
+
+  QString ensureErr;
+  if (!ensureExists(&ensureErr)) {
+    if (err) *err = ensureErr;
+    return false;
+  }
+
+  QFile f(m_path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = "cannot open db.json (read)";
+    return false;
+  }
+
+  auto doc = readJsonDocument(f, err);
+  f.close();
+
+  if (!doc.isObject()) {
+    if (err && err->isEmpty()) *err = "db.json is not object";
+    return false;
+  }
+
+  auto root = doc.object();
+  auto stations = root.value("stations").toArray();
+
+  int idx = -1;
+  for (int i = 0; i < stations.size(); i++) {
+    const auto entry = stations[i].toObject();
+    if (entry.value("id").toInt() == stationId) {
+      idx = i;
+      break;
+    }
+  }
+
+  const QJsonObject stationObject = QJsonObject::fromVariantMap(station);
+  if (idx >= 0) stations[idx] = stationObject;
+  else stations.append(stationObject);
+
+  root["stations"] = stations;
   return writeRootObject(m_path, root, err);
 }
 
@@ -245,6 +340,55 @@ bool LocalDb::upsertSensorsForStation(int stationId, const QVariantList& sensors
   else storedSensors.append(entry);
 
   root["sensors"] = storedSensors;
+  return writeRootObject(m_path, root, err);
+}
+
+// Czyści listę stacji z wpisów, które nie mają żadnych zapisanych sensorów offline.
+bool LocalDb::pruneStationsWithoutCachedSensors(QString* err) const {
+  if (err) err->clear();
+
+  QString ensureErr;
+  if (!ensureExists(&ensureErr)) {
+    if (err) *err = ensureErr;
+    return false;
+  }
+
+  QFile f(m_path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = "cannot open db.json (read)";
+    return false;
+  }
+
+  auto doc = readJsonDocument(f, err);
+  f.close();
+
+  if (!doc.isObject()) {
+    if (err && err->isEmpty()) *err = "db.json is not object";
+    return false;
+  }
+
+  auto root = doc.object();
+  const auto stations = root.value("stations").toArray();
+  const auto sensors = root.value("sensors").toArray();
+
+  QSet<int> stationIdsWithCachedSensors;
+  for (const auto& value : sensors) {
+    const auto entry = value.toObject();
+    const int stationId = entry.value("stationId").toInt();
+    if (stationId > 0) stationIdsWithCachedSensors.insert(stationId);
+  }
+
+  QJsonArray filteredStations;
+  for (const auto& value : stations) {
+    const auto station = value.toObject();
+    if (stationIdsWithCachedSensors.contains(station.value("id").toInt())) {
+      filteredStations.append(station);
+    }
+  }
+
+  if (filteredStations == stations) return true;
+
+  root["stations"] = filteredStations;
   return writeRootObject(m_path, root, err);
 }
 
