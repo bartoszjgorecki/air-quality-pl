@@ -6,28 +6,28 @@
 #include <functional>
 
 /**
- * Handles communication with the GIOS REST API.
- * This class knows only the networking layer and contains no UI logic.
+ * Obsługuje komunikację z REST API GIOS.
+ * Ta klasa zna wyłącznie warstwę sieciową i nie zawiera logiki interfejsu.
  */
 class GiosClient : public QObject {
   Q_OBJECT
 public:
   /**
-   * Creates the API client.
+   * Tworzy klienta API.
    */
   explicit GiosClient(QObject* parent = nullptr);
 
   /**
-   * Downloads the list of monitoring stations.
+   * Pobiera listę stacji pomiarowych.
    */
   Q_INVOKABLE void fetchStations();
   /**
-   * Downloads the sensors available at a station.
+   * Pobiera sensory dostępne dla wskazanej stacji.
    */
   Q_INVOKABLE void fetchSensors(int stationId);
   /**
-   * Downloads station sensors and passes them to a callback.
-   * This path is used by the map layer to query multiple stations in parallel.
+   * Pobiera sensory stacji i przekazuje je do callbacku.
+   * Ta ścieżka jest używana przez warstwę mapy do równoległych zapytań dla wielu stacji.
    */
   void fetchSensorsForStation(
     int stationId,
@@ -35,12 +35,12 @@ public:
     std::function<void(QString)> onError = {}
   );
   /**
-   * Downloads measurements for the selected sensor.
+   * Pobiera pomiary dla wybranego sensora.
    */
   Q_INVOKABLE void fetchMeasurements(int sensorId);
   /**
-   * Downloads sensor measurements and passes them to a callback.
-   * This path is used by the map layer to query multiple stations in parallel.
+   * Pobiera pomiary sensora i przekazuje je do callbacku.
+   * Ta ścieżka jest używana przez warstwę mapy do równoległych zapytań dla wielu stacji.
    */
   void fetchMeasurementsForSensor(
     int sensorId,
@@ -49,23 +49,23 @@ public:
   );
 
 signals:
-  // Parsed data is forwarded to AppController through Qt signals.
+  // Sparsowane dane są przekazywane do AppControllera przez sygnały Qt.
   void stationsReady(QVariantList stations);
   void sensorsReady(QVariantList sensors);
   void measurementsReady(int sensorId, QString paramCode, QVariantList points);
   void error(QString message);
 
 private:
-  /// Main Qt object responsible for executing HTTP requests.
+  /// Główny obiekt Qt odpowiedzialny za wykonywanie żądań HTTP.
   QNetworkAccessManager m_nam;
-  /// Base address of the GIOS REST API.
+  /// Bazowy adres REST API GIOS.
   QString m_baseUrl;
-  /// Timeout for a single request in milliseconds.
+  /// Timeout pojedynczego żądania wyrażony w milisekundach.
   int m_timeoutMs;
 
   /**
-   * Sends a GET request and parses the response as JSON.
-   * JSON decoding itself runs on a worker thread.
+   * Wysyła żądanie GET i parsuje odpowiedź jako JSON.
+   * Samo dekodowanie JSON działa w wątku roboczym.
    */
   void getJson(const QUrl& url, std::function<void(const QJsonDocument&, const QByteArray&)>&& onOk);
 };

@@ -34,6 +34,63 @@ static QJsonDocument readJsonDocument(QFile& file, QString* err) {
   return doc;
 }
 
+// Zapisuje cały obiekt root do pliku bazy w sposób możliwie bezpieczny.
+static bool writeRootObject(const QString& path, const QJsonObject& root, QString* err) {
+  // QSaveFile zmniejsza ryzyko pozostawienia uszkodzonego pliku po niepełnym zapisie.
+  QSaveFile outFile(path);
+  if (!outFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    if (err) *err = "cannot open db.json (write)";
+    return false;
+  }
+
+  if (outFile.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0) {
+    if (err) *err = "cannot write db.json";
+    outFile.cancelWriting();
+    return false;
+  }
+
+  if (!outFile.commit()) {
+    if (err) *err = "cannot commit db.json";
+    return false;
+  }
+
+  return true;
+}
+
+// Zamienia listę QVariantMap na tablicę JSON, zachowując tylko sensowne rekordy.
+static QJsonArray variantListToJsonArray(const QVariantList& list) {
+  QJsonArray array;
+  QSet<int> seenIds;
+
+  for (const auto& value : list) {
+    const QVariantMap map = value.toMap();
+    if (map.isEmpty()) continue;
+
+    const int id = map.value("id").toInt();
+    if (id > 0) {
+      if (seenIds.contains(id)) continue;
+      seenIds.insert(id);
+    }
+
+    array.append(QJsonObject::fromVariantMap(map));
+  }
+
+  return array;
+}
+
+// Zamienia tablicę JSON z prostymi obiektami na listę używaną przez QML.
+static QVariantList jsonArrayToVariantList(const QJsonArray& array) {
+  QVariantList list;
+  list.reserve(array.size());
+
+  for (const auto& value : array) {
+    if (!value.isObject()) continue;
+    list.push_back(value.toObject().toVariantMap());
+  }
+
+  return list;
+}
+
 // Zapamiętuje ścieżkę do pliku pełniącego rolę lokalnej bazy.
 LocalDb::LocalDb(QString path) : m_path(std::move(path)) {}
 
@@ -53,6 +110,142 @@ bool LocalDb::ensureExists(QString* err) const {
   QJsonDocument doc(emptyDb());
   f.write(doc.toJson(QJsonDocument::Indented));
   return true;
+}
+
+// Wczytuje ostatnio zapisaną listę stacji, aby interfejs mógł działać także offline.
+QVariantList LocalDb::loadStations(QString* err) const {
+  QVariantList out;
+  if (err) err->clear();
+
+  QString ensureErr;
+  if (!ensureExists(&ensureErr)) {
+    if (err) *err = ensureErr;
+    return out;
+  }
+
+  QFile f(m_path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = "cannot open db.json";
+    return out;
+  }
+
+  const auto doc = readJsonDocument(f, err);
+  if (!doc.isObject()) {
+    if (err && err->isEmpty()) *err = "db.json is not object";
+    return out;
+  }
+
+  return jsonArrayToVariantList(doc.object().value("stations").toArray());
+}
+
+// Podmienia pełną zapisaną listę stacji na najnowszą migawkę pobraną online.
+bool LocalDb::replaceStations(const QVariantList& stations, QString* err) const {
+  if (err) err->clear();
+
+  QString ensureErr;
+  if (!ensureExists(&ensureErr)) {
+    if (err) *err = ensureErr;
+    return false;
+  }
+
+  QFile f(m_path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = "cannot open db.json (read)";
+    return false;
+  }
+
+  auto doc = readJsonDocument(f, err);
+  f.close();
+
+  if (!doc.isObject()) {
+    if (err && err->isEmpty()) *err = "db.json is not object";
+    return false;
+  }
+
+  auto root = doc.object();
+  root["stations"] = variantListToJsonArray(stations);
+  return writeRootObject(m_path, root, err);
+}
+
+// Wczytuje zapisane sensory dla jednej stacji, jeśli były już wcześniej pobrane.
+QVariantList LocalDb::loadSensorsForStation(int stationId, QString* err) const {
+  QVariantList out;
+  if (err) err->clear();
+
+  QString ensureErr;
+  if (!ensureExists(&ensureErr)) {
+    if (err) *err = ensureErr;
+    return out;
+  }
+
+  QFile f(m_path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = "cannot open db.json";
+    return out;
+  }
+
+  const auto doc = readJsonDocument(f, err);
+  if (!doc.isObject()) {
+    if (err && err->isEmpty()) *err = "db.json is not object";
+    return out;
+  }
+
+  const auto sensors = doc.object().value("sensors").toArray();
+  for (const auto& value : sensors) {
+    const auto entry = value.toObject();
+    if (entry.value("stationId").toInt() != stationId) continue;
+    return jsonArrayToVariantList(entry.value("items").toArray());
+  }
+
+  if (err) *err = "no cached sensors for station";
+  return out;
+}
+
+// Aktualizuje zapisane sensory tylko dla wskazanej stacji, bez ruszania innych wpisów.
+bool LocalDb::upsertSensorsForStation(int stationId, const QVariantList& sensors, QString* err) const {
+  if (err) err->clear();
+
+  QString ensureErr;
+  if (!ensureExists(&ensureErr)) {
+    if (err) *err = ensureErr;
+    return false;
+  }
+
+  QFile f(m_path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = "cannot open db.json (read)";
+    return false;
+  }
+
+  auto doc = readJsonDocument(f, err);
+  f.close();
+
+  if (!doc.isObject()) {
+    if (err && err->isEmpty()) *err = "db.json is not object";
+    return false;
+  }
+
+  auto root = doc.object();
+  auto storedSensors = root.value("sensors").toArray();
+
+  int idx = -1;
+  for (int i = 0; i < storedSensors.size(); i++) {
+    const auto entry = storedSensors[i].toObject();
+    if (entry.value("stationId").toInt() == stationId) {
+      idx = i;
+      break;
+    }
+  }
+
+  QJsonObject entry;
+  entry["stationId"] = stationId;
+  entry["items"] = variantListToJsonArray(sensors);
+
+  if (idx >= 0) storedSensors[idx] = entry;
+  else storedSensors.append(entry);
+
+  root["sensors"] = storedSensors;
+  return writeRootObject(m_path, root, err);
 }
 
 // Sprawdza tylko obecność serii, bez wczytywania całych pomiarów do UI.
@@ -230,24 +423,5 @@ bool LocalDb::upsertSeries(
   else measurements.append(entry);
 
   root["measurements"] = measurements;
-
-  // QSaveFile zmniejsza ryzyko pozostawienia uszkodzonego pliku po niepełnym zapisie.
-  QSaveFile outFile(m_path);
-  if (!outFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    if (err) *err = "cannot open db.json (write)";
-    return false;
-  }
-
-  if (outFile.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0) {
-    if (err) *err = "cannot write db.json";
-    outFile.cancelWriting();
-    return false;
-  }
-
-  if (!outFile.commit()) {
-    if (err) *err = "cannot commit db.json";
-    return false;
-  }
-
-  return true;
+  return writeRootObject(m_path, root, err);
 }

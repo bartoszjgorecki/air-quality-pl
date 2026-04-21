@@ -13,7 +13,9 @@ Air Quality Monitor is a desktop C++/Qt application for browsing Polish air-qual
 - download measurements for the selected sensor
 - choose how many recent days should be shown on the chart for online and local data
 - save downloaded series to a local JSON database
+- cache downloaded station and sensor lists in the local JSON database
 - fall back to saved local history when the API is unavailable
+- fall back to cached stations and cached sensors when the API is unavailable
 - display a chart with min, max, average, trend, and timestamps for min/max values
 - run unit tests for parser, storage, and analysis logic
 
@@ -50,6 +52,7 @@ cmake --build build-cmake
 10. Click a chart point to display its exact value and timestamp.
 11. Click `Save to Local DB` to persist the current series in the local JSON database.
 12. Use `Chart range` and `Load Local History` to display previously saved data for the same selected period when needed.
+13. If the API is unavailable, click `Download` again to load cached stations from the local database, then select a station to load its cached sensors.
 
 ## What The Map Status Means
 
@@ -73,7 +76,7 @@ The application is designed to stay usable when the API or local storage fails:
 - parser helpers throw `std::runtime_error` on invalid payload shapes
 - `AppController` catches `std::exception` and fallback unknown exceptions around station, sensor, measurement, and local DB actions
 - the local JSON database reports read and write errors through user-facing status text
-- if online access fails and local history exists, the UI informs the user that saved data can still be loaded
+- if online access fails, the UI tries to load cached stations or cached sensors first, and still informs the user when saved local history is available
 
 ## Multithreading
 

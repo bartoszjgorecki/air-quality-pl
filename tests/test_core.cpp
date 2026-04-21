@@ -33,6 +33,8 @@ private slots:
   void analyzerRejectsEmptySeries();
   void localDbStoresAndLoadsHistory();
   void localDbLoadsFullSensorHistory();
+  void localDbStoresAndLoadsStationCache();
+  void localDbStoresAndLoadsSensorCache();
   void localDbReportsInvalidJson();
   void parsersHandleLocalizedStationsPayload();
   void parsersHandleLocalizedSensorsPayload();
@@ -162,6 +164,94 @@ void CoreTests::localDbLoadsFullSensorHistory() {
   QCOMPARE(loaded.size(), 3);
   QCOMPARE(loaded.first().dt, base.addSecs(3600));
   QCOMPARE(loaded.last().dt, base.addDays(5));
+}
+
+void CoreTests::localDbStoresAndLoadsStationCache() {
+  QTemporaryDir tempDir;
+  QVERIFY(tempDir.isValid());
+
+  const QString dbPath = tempDir.filePath("db.json");
+  LocalDb db(dbPath);
+  QString err;
+
+  QVERIFY(db.ensureExists(&err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  QVariantList stations;
+  stations.push_back(QVariantMap{
+    {"id", 11},
+    {"name", "Poznan, Polanka"},
+    {"city", "Poznan"},
+    {"province", "WIELKOPOLSKIE"},
+    {"address", "Polanka 3"},
+    {"lat", 52.404f},
+    {"lon", 16.953f},
+  });
+  stations.push_back(QVariantMap{
+    {"id", 12},
+    {"name", "Warszawa, Marszalkowska"},
+    {"city", "Warszawa"},
+    {"province", "MAZOWIECKIE"},
+    {"address", "Marszalkowska"},
+    {"lat", 52.229f},
+    {"lon", 21.012f},
+  });
+
+  QVERIFY(db.replaceStations(stations, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  const auto loaded = db.loadStations(&err);
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+  QCOMPARE(loaded.size(), 2);
+  QCOMPARE(loaded[0].toMap().value("id").toInt(), 11);
+  QCOMPARE(loaded[0].toMap().value("city").toString(), QString("Poznan"));
+  QCOMPARE(loaded[1].toMap().value("id").toInt(), 12);
+}
+
+void CoreTests::localDbStoresAndLoadsSensorCache() {
+  QTemporaryDir tempDir;
+  QVERIFY(tempDir.isValid());
+
+  const QString dbPath = tempDir.filePath("db.json");
+  LocalDb db(dbPath);
+  QString err;
+
+  QVERIFY(db.ensureExists(&err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  QVariantList sensors;
+  sensors.push_back(QVariantMap{
+    {"id", 958},
+    {"stationId", 156},
+    {"paramName", "tlenek azotu"},
+    {"paramCode", "NO"},
+    {"displayName", "Nitric oxide"},
+    {"paramFormula", "NO"},
+    {"idParam", 16},
+  });
+  sensors.push_back(QVariantMap{
+    {"id", 959},
+    {"stationId", 156},
+    {"paramName", "ozon"},
+    {"paramCode", "O3"},
+    {"displayName", "Ozone"},
+    {"paramFormula", "O3"},
+    {"idParam", 7},
+  });
+
+  QVERIFY(db.upsertSensorsForStation(156, sensors, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  const auto loaded = db.loadSensorsForStation(156, &err);
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+  QCOMPARE(loaded.size(), 2);
+  QCOMPARE(loaded[0].toMap().value("id").toInt(), 958);
+  QCOMPARE(loaded[1].toMap().value("paramCode").toString(), QString("O3"));
+
+  err.clear();
+  const auto missing = db.loadSensorsForStation(999, &err);
+  QVERIFY(missing.isEmpty());
+  QVERIFY(!err.isEmpty());
 }
 
 void CoreTests::localDbReportsInvalidJson() {

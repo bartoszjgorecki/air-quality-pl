@@ -6,46 +6,46 @@
 
 namespace GiosParsers {
 
-// Parsers in this namespace make the application resilient to the different
-// response shapes returned by the public GIOS API.
+// Parsery w tej przestrzeni nazw uodparniają aplikację na różne kształty
+// odpowiedzi zwracanych przez publiczne API GIOS.
 
 /**
- * Represents one parsed page from the stations endpoint.
+ * Reprezentuje jedną sparsowaną stronę odpowiedzi endpointu stacji.
  */
 struct StationsPage {
-  /// Normalized list of stations from the current page.
+  /// Znormalizowana lista stacji z bieżącej strony odpowiedzi.
   QVariantList stations;
-  /// URL of the next page, if the API provided one.
+  /// Adres URL kolejnej strony, jeśli API go zwróciło.
   QString nextUrl;
-  /// Whether additional page downloads are no longer necessary.
+  /// Informuje, czy dalsze pobieranie stron nie jest już potrzebne.
   bool reachedEnd = true;
 };
 
 /**
- * Represents one parsed measurement series for a sensor.
+ * Reprezentuje jedną sparsowaną serię pomiarową dla sensora.
  */
 struct MeasurementSeries {
-  /// Recognized parameter code, for example PM10 or NO2.
+  /// Rozpoznany kod parametru, na przykład PM10 albo NO2.
   QString paramCode;
-  /// Series points ready to be passed to the rest of the application.
+  /// Punkty serii gotowe do przekazania do dalszej części aplikacji.
   QVariantList points;
 };
 
 /**
- * Parses one page of the stations response.
- * Throws std::runtime_error when the JSON shape is invalid.
+ * Parsuje jedną stronę odpowiedzi ze stacjami.
+ * Zgłasza `std::runtime_error`, gdy kształt JSON jest niepoprawny.
  */
 StationsPage parseStationsPage(const QJsonDocument& doc, const QUrl& currentUrl);
 
 /**
- * Parses a sensor-list response.
- * Throws std::runtime_error when the JSON shape is invalid.
+ * Parsuje odpowiedź zawierającą listę sensorów.
+ * Zgłasza `std::runtime_error`, gdy kształt JSON jest niepoprawny.
  */
 QVariantList parseSensors(const QJsonDocument& doc);
 
 /**
- * Parses a measurement-list response.
- * Throws std::runtime_error when the JSON shape is invalid.
+ * Parsuje odpowiedź zawierającą listę pomiarów.
+ * Zgłasza `std::runtime_error`, gdy kształt JSON jest niepoprawny.
  */
 MeasurementSeries parseMeasurements(const QJsonDocument& doc);
 

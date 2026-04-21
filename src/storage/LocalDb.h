@@ -2,48 +2,66 @@
 #include <QString>
 #include <QVector>
 #include <QDateTime>
+#include <QVariantList>
 #include "../model/Types.h"
 
 /**
- * Provides local persistence for measurements in a JSON file.
- * It is the simplest local "database" required by the project.
+ * Zapewnia lokalne zapisywanie danych w pliku JSON.
+ * To najprostsza lokalna "baza danych" wymagana w projekcie.
  */
 class LocalDb {
 public:
   /**
-   * Creates a database wrapper for the given file path.
+   * Tworzy obiekt obsługujący bazę wskazaną przez podaną ścieżkę.
    */
   explicit LocalDb(QString path);
 
   /**
-   * Ensures that the database file exists and has the expected root JSON shape.
+   * Gwarantuje istnienie pliku bazy oraz poprawny kształt głównego obiektu JSON.
    */
   bool ensureExists(QString* err) const;
 
   /**
-   * Loads saved history for a sensor within the given time range.
+   * Wczytuje z lokalnej bazy zapisaną listę stacji.
+   */
+  QVariantList loadStations(QString* err) const;
+  /**
+   * Podmienia zapisaną listę stacji na najnowszą migawkę pobraną online.
+   */
+  bool replaceStations(const QVariantList& stations, QString* err) const;
+  /**
+   * Wczytuje z lokalnej bazy zapisane sensory dla jednej stacji.
+   */
+  QVariantList loadSensorsForStation(int stationId, QString* err) const;
+  /**
+   * Dodaje lub aktualizuje zapisaną listę sensorów dla wybranej stacji.
+   */
+  bool upsertSensorsForStation(int stationId, const QVariantList& sensors, QString* err) const;
+
+  /**
+   * Wczytuje zapisaną historię sensora z podanego zakresu czasu.
    */
   QVector<MeasurementPoint> loadHistory(
     int sensorId, const QDateTime& from, const QDateTime& to, QString* err
   ) const;
   /**
-   * Loads the full saved history for a sensor without applying a date filter.
+   * Wczytuje pełną zapisaną historię sensora bez filtrowania po dacie.
    */
   QVector<MeasurementPoint> loadAllHistory(int sensorId, QString* err) const;
 
   /**
-   * Inserts or updates a measurement series for a sensor.
+   * Dodaje lub aktualizuje serię pomiarową dla sensora.
    */
   bool upsertSeries(
     int sensorId, const QString& paramCode, const QVector<MeasurementPoint>& pts, QString* err
   ) const;
 
   /**
-   * Returns whether any series has already been saved for the sensor.
+   * Zwraca informację, czy dla sensora zapisano już jakąkolwiek serię.
    */
   bool hasAnySeries(int sensorId) const;
 
 private:
-  /// Path to the db.json file used by the application.
+  /// Ścieżka do pliku `db.json` używanego przez aplikację.
   QString m_path;
 };

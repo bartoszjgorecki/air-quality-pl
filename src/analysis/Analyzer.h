@@ -2,34 +2,34 @@
 #include "../model/Types.h"
 
 /**
- * Computes basic statistics for a measurement series.
- * This class is stateless and purely computational.
+ * Oblicza podstawowe statystyki dla serii pomiarowej.
+ * Ta klasa nie przechowuje stanu i pełni wyłącznie rolę obliczeniową.
  */
 struct SeriesCoverage {
-  /// Whether a valid time span could be derived.
+  /// Informuje, czy udało się wyznaczyć poprawny zakres czasu.
   bool ok = false;
-  /// Number of points with a valid timestamp.
+  /// Liczba punktów z poprawnym znacznikiem czasu.
   int pointCount = 0;
-  /// Earliest timestamp in the series.
+  /// Najwcześniejszy czas występujący w serii.
   QDateTime firstAt;
-  /// Latest timestamp in the series.
+  /// Najpóźniejszy czas występujący w serii.
   QDateTime lastAt;
-  /// Span of the series expressed in full hours.
+  /// Rozpiętość serii wyrażona w pełnych godzinach.
   qint64 spanHours = 0;
-  /// Span of the series expressed in days as a floating-point value.
+  /// Rozpiętość serii wyrażona w dniach jako liczba zmiennoprzecinkowa.
   double spanDays = 0.0;
 };
 
 class Analyzer {
 public:
   /**
-   * Computes the minimum, maximum, average, and trend for the provided points.
-   * Missing values are skipped in calculations but still counted.
+   * Oblicza minimum, maksimum, średnią i trend dla podanych punktów.
+   * Brakujące wartości są pomijane w obliczeniach, ale nadal zliczane.
    */
   static Stats compute(const QVector<MeasurementPoint>& pts);
   /**
-   * Computes the actual time coverage of the series so the UI can show
-   * how much online or local data is really available.
+   * Oblicza rzeczywiste pokrycie czasowe serii, aby interfejs mógł pokazać,
+   * ile danych online albo lokalnych jest faktycznie dostępnych.
    */
   static SeriesCoverage computeCoverage(const QVector<MeasurementPoint>& pts);
 };

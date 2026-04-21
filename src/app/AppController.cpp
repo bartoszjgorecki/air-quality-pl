@@ -107,11 +107,23 @@ AppController::AppController(QObject* parent)
       m_stations = std::move(s);
       emit stationsChanged();
       setOffline(false);
-      setBanner("Online: stations loaded");
+      m_pendingRequest = PendingRequest::None;
+      m_pendingStationId = -1;
+
+      QString cacheErr;
+      if (!m_db.replaceStations(m_stations, &cacheErr)) {
+        setBanner("Online: stations loaded, but station cache update failed: " + cacheErr);
+      } else {
+        setBanner("Online: stations loaded");
+      }
     } catch (const std::exception& ex) {
+      m_pendingRequest = PendingRequest::None;
+      m_pendingStationId = -1;
       setOffline(true);
       setBanner("Offline: station processing error: " + QString::fromUtf8(ex.what()));
     } catch (...) {
+      m_pendingRequest = PendingRequest::None;
+      m_pendingStationId = -1;
       setOffline(true);
       setBanner("Offline: unknown station processing error");
     }
@@ -122,11 +134,24 @@ AppController::AppController(QObject* parent)
       m_sensors = std::move(s);
       emit sensorsChanged();
       setOffline(false);
-      setBanner("Online: sensors loaded");
+      const int stationId = m_pendingStationId > 0 ? m_pendingStationId : m_currentStationId;
+      m_pendingRequest = PendingRequest::None;
+      m_pendingStationId = -1;
+
+      QString cacheErr;
+      if (stationId > 0 && !m_db.upsertSensorsForStation(stationId, m_sensors, &cacheErr)) {
+        setBanner("Online: sensors loaded, but sensor cache update failed: " + cacheErr);
+      } else {
+        setBanner("Online: sensors loaded");
+      }
     } catch (const std::exception& ex) {
+      m_pendingRequest = PendingRequest::None;
+      m_pendingStationId = -1;
       setOffline(true);
       setBanner("Offline: sensor processing error: " + QString::fromUtf8(ex.what()));
     } catch (...) {
+      m_pendingRequest = PendingRequest::None;
+      m_pendingStationId = -1;
       setOffline(true);
       setBanner("Offline: unknown sensor processing error");
     }
@@ -134,6 +159,7 @@ AppController::AppController(QObject* parent)
 
   connect(&m_gios, &GiosClient::measurementsReady, this, [this](int sensorId, QString paramCode, QVariantList points) {
     try {
+      m_pendingRequest = PendingRequest::None;
       setCurrentSensorId(sensorId);
       const QString selectedParamCode = sensorParamCode(sensorId);
       if (!selectedParamCode.isEmpty()) {
@@ -161,15 +187,29 @@ AppController::AppController(QObject* parent)
       const SeriesCoverage coverage = Analyzer::computeCoverage(m_sourceSeries);
       setBanner(buildOnlineMeasurementBanner(describeParamCode(m_currentParamCode), coverage, m_currentChartRangeDays));
     } catch (const std::exception& ex) {
+      m_pendingRequest = PendingRequest::None;
       setOffline(true);
       setBanner("Offline: measurement processing error: " + QString::fromUtf8(ex.what()));
     } catch (...) {
+      m_pendingRequest = PendingRequest::None;
       setOffline(true);
       setBanner("Offline: unknown measurement processing error");
     }
   });
 
   connect(&m_gios, &GiosClient::error, this, [this](const QString& msg) {
+    const PendingRequest failedRequest = m_pendingRequest;
+    const int failedStationId = m_pendingStationId;
+    m_pendingRequest = PendingRequest::None;
+    m_pendingStationId = -1;
+
+    if (failedRequest == PendingRequest::Stations && loadStationsFromLocalCache(msg)) {
+      return;
+    }
+    if (failedRequest == PendingRequest::Sensors && loadSensorsFromLocalCache(failedStationId, msg)) {
+      return;
+    }
+
     setOffline(true);
     refreshHistoryAvailability();
     if (m_historyAvailable) {
@@ -436,15 +476,78 @@ void AppController::refreshChartRangeMaxDays() {
   }
 }
 
+// Próbuje podmienić listę stacji na ostatnią migawkę zapisaną lokalnie.
+bool AppController::loadStationsFromLocalCache(const QString& failureReason) {
+  QString err;
+  const QVariantList cachedStations = m_db.loadStations(&err);
+  if (!err.isEmpty()) {
+    setOffline(true);
+    setBanner("Offline: " + failureReason + ". Local station cache could not be read: " + err);
+    return false;
+  }
+  if (cachedStations.isEmpty()) {
+    return false;
+  }
+
+  m_stations = cachedStations;
+  emit stationsChanged();
+  setOffline(true);
+  setBanner("Offline: " + failureReason + ". Loaded " + QString::number(m_stations.size())
+            + " station(s) from the local database.");
+  return true;
+}
+
+// Próbuje podmienić listę sensorów na dane zapisane wcześniej dla wskazanej stacji.
+bool AppController::loadSensorsFromLocalCache(int stationId, const QString& failureReason) {
+  if (stationId <= 0) return false;
+
+  QString err;
+  const QVariantList cachedSensors = m_db.loadSensorsForStation(stationId, &err);
+  if (!err.isEmpty() && err != "no cached sensors for station") {
+    setOffline(true);
+    setBanner("Offline: " + failureReason + ". Local sensor cache could not be read: " + err);
+    return false;
+  }
+  if (!err.isEmpty()) {
+    return false;
+  }
+
+  m_sensors = cachedSensors;
+  emit sensorsChanged();
+  setOffline(true);
+
+  if (m_sensors.isEmpty()) {
+    setBanner("Offline: " + failureReason + ". Loaded an empty cached sensor list for station "
+              + QString::number(stationId) + ".");
+  } else {
+    setBanner("Offline: " + failureReason + ". Loaded " + QString::number(m_sensors.size())
+              + " cached sensor(s) for station " + QString::number(stationId)
+              + " from the local database.");
+  }
+  return true;
+}
+
 // Rozpoczyna pobieranie listy stacji z API.
 void AppController::refreshStations() {
   try {
+    m_pendingRequest = PendingRequest::Stations;
+    m_pendingStationId = -1;
     setBanner("Online: downloading stations...");
     m_gios.fetchStations();
   } catch (const std::exception& ex) {
+    m_pendingRequest = PendingRequest::None;
+    m_pendingStationId = -1;
+    if (loadStationsFromLocalCache("exception while loading stations: " + QString::fromUtf8(ex.what()))) {
+      return;
+    }
     setOffline(true);
     setBanner("Offline: exception while loading stations: " + QString::fromUtf8(ex.what()));
   } catch (...) {
+    m_pendingRequest = PendingRequest::None;
+    m_pendingStationId = -1;
+    if (loadStationsFromLocalCache("unknown exception while loading stations")) {
+      return;
+    }
     setOffline(true);
     setBanner("Offline: unknown exception while loading stations");
   }
@@ -454,6 +557,9 @@ void AppController::refreshStations() {
 void AppController::loadSensors(int stationId) {
   try {
     // Zmiana stacji oznacza wyczyszczenie poprzedniego wyboru sensora i warstwy mapy.
+    m_currentStationId = stationId;
+    m_pendingRequest = PendingRequest::Sensors;
+    m_pendingStationId = stationId;
     m_sensors.clear();
     emit sensorsChanged();
     setCurrentSensorId(-1);
@@ -462,9 +568,19 @@ void AppController::loadSensors(int stationId) {
     setBanner("Online: downloading sensors for station " + QString::number(stationId) + "...");
     m_gios.fetchSensors(stationId);
   } catch (const std::exception& ex) {
+    m_pendingRequest = PendingRequest::None;
+    m_pendingStationId = -1;
+    if (loadSensorsFromLocalCache(stationId, "exception while loading sensors: " + QString::fromUtf8(ex.what()))) {
+      return;
+    }
     setOffline(true);
     setBanner("Offline: exception while loading sensors: " + QString::fromUtf8(ex.what()));
   } catch (...) {
+    m_pendingRequest = PendingRequest::None;
+    m_pendingStationId = -1;
+    if (loadSensorsFromLocalCache(stationId, "unknown exception while loading sensors")) {
+      return;
+    }
     setOffline(true);
     setBanner("Offline: unknown exception while loading sensors");
   }
@@ -473,6 +589,7 @@ void AppController::loadSensors(int stationId) {
 // Pobiera serię online dla wybranego sensora.
 void AppController::loadOnline(int sensorId, int days) {
   try {
+    m_pendingRequest = PendingRequest::Measurements;
     m_currentChartRangeDays = std::max(1, days);
     m_showingLocalHistory = false;
     setCurrentSensorId(sensorId);
@@ -489,9 +606,11 @@ void AppController::loadOnline(int sensorId, int days) {
     );
     m_gios.fetchMeasurements(sensorId);
   } catch (const std::exception& ex) {
+    m_pendingRequest = PendingRequest::None;
     setOffline(true);
     setBanner("Offline: exception while loading measurements: " + QString::fromUtf8(ex.what()));
   } catch (...) {
+    m_pendingRequest = PendingRequest::None;
     setOffline(true);
     setBanner("Offline: unknown exception while loading measurements");
   }

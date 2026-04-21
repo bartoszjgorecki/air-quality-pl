@@ -8,13 +8,13 @@
 #include "../model/Types.h"
 
 /**
- * Coordinates the UI, the remote API, and locally stored history.
+ * Koordynuje interfejs, zdalne API oraz lokalnie zapisaną historię.
  */
 class AppController : public QObject {
   Q_OBJECT
 
-  // The properties below are exposed to QML so the interface can react
-  // automatically to state changes coming from C++.
+  // Właściwości poniżej są wystawione do QML, aby interfejs mógł automatycznie
+  // reagować na zmiany stanu pochodzące z warstwy C++.
   Q_PROPERTY(QString banner READ banner NOTIFY bannerChanged)
   Q_PROPERTY(bool offline READ offline NOTIFY offlineChanged)
   Q_PROPERTY(bool historyAvailable READ historyAvailable NOTIFY historyAvailableChanged)
@@ -34,111 +34,111 @@ class AppController : public QObject {
 
 public:
   /**
-   * Creates the main application controller.
+   * Tworzy główny kontroler aplikacji.
    */
   explicit AppController(QObject* parent = nullptr);
 
   /**
-   * Returns the current status text shown in the header.
+   * Zwraca aktualny tekst statusu pokazywany w nagłówku.
    */
   QString banner() const { return m_banner; }
   /**
-   * Returns whether the application is currently operating in offline mode.
+   * Zwraca informację, czy aplikacja działa obecnie w trybie offline.
    */
   bool offline() const { return m_offline; }
   /**
-   * Returns whether local history exists for the selected sensor.
+   * Zwraca informację, czy dla wybranego sensora istnieje historia lokalna.
    */
   bool historyAvailable() const { return m_historyAvailable; }
   /**
-   * Returns the identifier of the currently selected sensor.
+   * Zwraca identyfikator aktualnie wybranego sensora.
    */
   int currentSensorId() const { return m_currentSensorId; }
   /**
-   * Returns the code of the currently selected measurement parameter.
+   * Zwraca kod aktualnie wybranego parametru pomiarowego.
    */
   QString currentParamCode() const { return m_currentParamCode; }
   /**
-   * Returns the latest values used to color markers on the map.
+   * Zwraca najnowsze wartości używane do kolorowania markerów na mapie.
    */
   QVariantMap mapStationMetrics() const { return m_mapStationMetrics; }
   /**
-   * Returns the value range of the current map-coloring overlay.
+   * Zwraca zakres wartości aktualnej warstwy kolorowania mapy.
    */
   QVariantMap mapMetricRange() const { return m_mapMetricRange; }
   /**
-   * Returns a descriptive status string for the current map overlay.
+   * Zwraca opisowy komunikat statusu dla bieżącej warstwy mapy.
    */
   QString mapOverlayStatus() const { return m_mapOverlayStatus; }
 
   /**
-   * Returns the currently loaded station list.
+   * Zwraca aktualnie wczytaną listę stacji.
    */
   QVariantList stations() const { return m_stations; }
   /**
-   * Returns the currently loaded sensor list.
+   * Zwraca aktualnie wczytaną listę sensorów.
    */
   QVariantList sensors() const { return m_sensors; }
 
   /**
-   * Returns chart points exposed to QML.
+   * Zwraca punkty wykresu udostępniane do QML.
    */
   QVariantList chartPoints() const { return m_chartPoints; }
   /**
-   * Returns statistics computed for the current series.
+   * Zwraca statystyki policzone dla bieżącej serii.
    */
   QVariantMap stats() const { return m_stats; }
   /**
-   * Returns a user-facing description of the actual data range available on the chart.
+   * Zwraca opis rzeczywistego zakresu danych dostępnych aktualnie na wykresie.
    */
   QString chartRangeInfo() const { return m_chartRangeInfo; }
   /**
-   * Returns the current upper limit for the selectable chart range.
+   * Zwraca bieżącą górną granicę wybieralnego zakresu wykresu.
    */
   int chartRangeMaxDays() const { return m_chartRangeMaxDays; }
 
   /**
-   * Downloads the station list from the API.
+   * Pobiera listę stacji z API.
    */
   Q_INVOKABLE void refreshStations();
   /**
-   * Downloads sensors for the selected station.
+   * Pobiera sensory dla wybranej stacji.
    */
   Q_INVOKABLE void loadSensors(int stationId);
   /**
-   * Downloads measurement data for a sensor.
-   * The day range determines which part of the series should be shown on the chart.
+   * Pobiera dane pomiarowe dla wskazanego sensora.
+   * Zakres dni określa, która część serii ma zostać pokazana na wykresie.
    */
   Q_INVOKABLE void loadOnline(int sensorId, int days);
   /**
-   * Changes the day range for the currently loaded series shown on the chart.
+   * Zmienia zakres dni dla aktualnie wczytanej serii pokazywanej na wykresie.
    */
   Q_INVOKABLE void applyCurrentChartRange(int days);
 
   /**
-   * Saves the current series to the local JSON database.
+   * Zapisuje bieżącą serię do lokalnej bazy JSON.
    */
   Q_INVOKABLE void saveCurrentToDb();
   /**
-   * Loads history from the local database for a sensor and time range.
+   * Wczytuje historię z lokalnej bazy dla sensora i podanego zakresu czasu.
    */
   Q_INVOKABLE void loadHistory(int sensorId, const QString& fromIso, const QString& toIso);
   /**
-   * Loads local history for the selected sensor from the last N days.
+   * Wczytuje historię lokalną dla wybranego sensora z ostatnich N dni.
    */
   Q_INVOKABLE void loadCurrentHistory(int days);
   /**
-   * Refreshes the map-coloring overlay for visible stations and the selected parameter.
-   * Internally this starts many asynchronous requests and aggregates the result.
+   * Odświeża warstwę kolorowania mapy dla widocznych stacji i wybranego parametru.
+   * Wewnętrznie uruchamia wiele żądań asynchronicznych i agreguje wynik.
    */
   Q_INVOKABLE void refreshMapMeasurements(const QVariantList& stationIds, const QString& paramCode);
   /**
-   * Clears the current map-overlay values.
+   * Czyści bieżące wartości warstwy mapy.
    */
   Q_INVOKABLE void clearMapMeasurements();
 
 signals:
-  // Signals notify QML that a specific part of the state has changed.
+  // Sygnały informują QML, że zmieniła się konkretna część stanu aplikacji.
   void bannerChanged();
   void offlineChanged();
   void historyAvailableChanged();
@@ -157,91 +157,106 @@ signals:
   void chartRangeMaxDaysChanged();
 
 private:
-  // Private helper methods keep the controller logic organized and hide
-  // state-update details from the user interface.
+  enum class PendingRequest {
+    None,
+    Stations,
+    Sensors,
+    Measurements
+  };
+
+  // Prywatne metody pomocnicze porządkują logikę kontrolera i ukrywają
+  // szczegóły aktualizacji stanu przed interfejsem użytkownika.
   /**
-   * Sets the banner text and emits the corresponding change signal.
+   * Ustawia tekst banera i emituje odpowiadający mu sygnał zmiany.
    */
   void setBanner(QString b);
   /**
-   * Sets the current description of the data range available on the chart.
+   * Ustawia bieżący opis zakresu danych dostępnych na wykresie.
    */
   void setChartRangeInfo(QString info);
   /**
-   * Sets the current upper limit for the chart-range selector.
+   * Ustawia bieżącą górną granicę selektora zakresu wykresu.
    */
   void setChartRangeMaxDays(int days);
   /**
-   * Updates the online/offline flag.
+   * Aktualizuje flagę trybu online/offline.
    */
   void setOffline(bool v);
   /**
-   * Updates the local-history availability flag.
+   * Aktualizuje flagę dostępności historii lokalnej.
    */
   void setHistoryAvailable(bool v);
   /**
-   * Stores the identifier of the current sensor.
+   * Zapamiętuje identyfikator bieżącego sensora.
    */
   void setCurrentSensorId(int sensorId);
   /**
-   * Stores the code of the current parameter.
+   * Zapamiętuje kod bieżącego parametru.
    */
   void setCurrentParamCode(QString paramCode);
   /**
-   * Returns the parameter code for a given sensor when it is known.
+   * Zwraca kod parametru dla podanego sensora, jeśli jest znany.
    */
   QString sensorParamCode(int sensorId) const;
   /**
-   * Builds a readable parameter label for the UI.
+   * Buduje czytelną etykietę parametru dla interfejsu.
    */
   QString describeParamCode(const QString& paramCode) const;
   /**
-   * Sets the status text for the map overlay.
+   * Ustawia tekst statusu dla warstwy mapy.
    */
   void setMapOverlayStatus(QString status);
   /**
-   * Recomputes the value range currently visible on the map.
+   * Przelicza zakres wartości aktualnie widocznych na mapie.
    */
   void updateMapMetricRange();
   /**
-   * Stores one value entry for a station on the map.
+   * Zapisuje jeden wpis wartości dla stacji na mapie.
    */
   void setMapStationMetric(int stationId, QVariantMap metric);
 
   /**
-   * Converts the domain series into chart points passed to QML.
+   * Zamienia serię domenową na punkty wykresu przekazywane do QML.
    */
   void setChartFromPoints(const QVector<MeasurementPoint>& pts);
   /**
-   * Returns only the tail of the series covering the last N days.
+   * Zwraca tylko końcowy fragment serii obejmujący ostatnie N dni.
    */
   QVector<MeasurementPoint> filterSeriesToLastDays(const QVector<MeasurementPoint>& pts, int days) const;
   /**
-   * Updates the visible series and statistics from the stored source series.
+   * Aktualizuje widoczną serię i statystyki na podstawie zapisanej serii źródłowej.
    */
   void updateDisplayedSeries(int days);
   /**
-   * Computes statistics for the given series of points.
+   * Liczy statystyki dla podanej serii punktów.
    */
   void setStatsFromPoints(const QVector<MeasurementPoint>& pts);
   /**
-   * Rechecks whether local history exists for the selected sensor.
+   * Ponownie sprawdza, czy dla wybranego sensora istnieje historia lokalna.
    */
   void refreshHistoryAvailability();
   /**
-   * Refreshes the user-facing description of the actual data coverage.
+   * Odświeża opis rzeczywistego pokrycia danych widoczny dla użytkownika.
    */
   void refreshChartRangeInfo();
   /**
-   * Refreshes the maximum chart-range value allowed by the current source data.
+   * Odświeża maksymalną wartość zakresu wykresu dozwoloną przez bieżące źródło danych.
    */
   void refreshChartRangeMaxDays();
+  /**
+   * Wczytuje lokalnie zapisaną listę stacji, gdy żądanie online zakończy się błędem.
+   */
+  bool loadStationsFromLocalCache(const QString& failureReason);
+  /**
+   * Wczytuje lokalnie zapisane sensory dla wybranej stacji, gdy żądanie online zakończy się błędem.
+   */
+  bool loadSensorsFromLocalCache(int stationId, const QString& failureReason);
 
   QString m_banner;
   bool m_offline = true;
   bool m_historyAvailable = false;
 
-  // Data exposed directly to the UI.
+  // Dane udostępniane bezpośrednio do interfejsu.
   QVariantList m_stations;
   QVariantList m_sensors;
 
@@ -253,21 +268,27 @@ private:
   QVariantMap m_mapMetricRange;
   QString m_mapOverlayStatus;
 
-  // Current application context.
+  // Bieżący kontekst pracy aplikacji.
+  int m_currentStationId = -1;
   int m_currentSensorId = -1;
   QString m_currentParamCode;
 
-  // m_sourceSeries stores the full source series, while m_currentSeries
-  // stores only the part currently displayed on the chart.
+  // `m_sourceSeries` przechowuje pełną serię źródłową, a `m_currentSeries`
+  // tylko tę część, która jest aktualnie widoczna na wykresie.
   QVector<MeasurementPoint> m_sourceSeries;
   QVector<MeasurementPoint> m_currentSeries;
   int m_currentChartRangeDays = 7;
   bool m_showingLocalHistory = false;
 
-  // Token used to discard stale map responses after a filter or sensor change.
+  // Znacznik służący do odrzucania przestarzałych odpowiedzi mapy po zmianie filtra albo sensora.
   quint64 m_mapRequestToken = 0;
 
-  // External dependencies used by the controller.
+  // Te pola mówią obsłudze błędów, które żądanie online się nie powiodło
+  // i z jakich danych lokalnych należy skorzystać w trybie awaryjnym.
+  PendingRequest m_pendingRequest = PendingRequest::None;
+  int m_pendingStationId = -1;
+
+  // Zewnętrzne zależności używane przez kontroler.
   LocalDb m_db;
   GiosClient m_gios;
 };

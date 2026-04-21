@@ -6,35 +6,35 @@
 #include <optional>
 
 /**
- * Represents a single measurement point in time.
+ * Reprezentuje pojedynczy punkt pomiarowy w czasie.
  */
 struct MeasurementPoint {
-  /// Timestamp of a single measurement.
+  /// Znacznik czasu pojedynczego pomiaru.
   QDateTime dt;
-  /// Measurement value; std::nullopt means that the source data was missing.
+  /// Wartość pomiaru; `std::nullopt` oznacza brak danych w źródle.
   std::optional<double> value;
 };
 
 /**
- * Stores aggregated statistics for a measurement series.
+ * Przechowuje zagregowane statystyki dla serii pomiarowej.
  */
 struct Stats {
-  /// Whether statistics were successfully computed for a non-empty series.
+  /// Informuje, czy statystyki udało się policzyć dla niepustej serii.
   bool ok = false;
-  /// Smallest valid value in the series.
+  /// Najmniejsza poprawna wartość w serii.
   double min = 0.0;
-  /// Largest valid value in the series.
+  /// Największa poprawna wartość w serii.
   double max = 0.0;
-  /// Average computed only from valid values.
+  /// Średnia policzona wyłącznie z poprawnych wartości.
   double avg = 0.0;
-  /// Timestamp of the minimum value.
+  /// Czas wystąpienia wartości minimalnej.
   QDateTime minAt;
-  /// Timestamp of the maximum value.
+  /// Czas wystąpienia wartości maksymalnej.
   QDateTime maxAt;
-  /// Number of valid points used in the calculations.
+  /// Liczba poprawnych punktów użytych w obliczeniach.
   int count = 0;
-  /// Number of points without a value.
+  /// Liczba punktów bez wartości.
   int missing = 0;
-  /// Simplified trend: up, down, flat, or unknown.
+  /// Uproszczony trend: wzrost, spadek, stabilnie albo nieznany.
   QString trend; // up | down | flat | unknown
 };
