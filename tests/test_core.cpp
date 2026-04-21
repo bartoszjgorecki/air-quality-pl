@@ -38,6 +38,7 @@ private slots:
   void localDbStoresAndLoadsStationCache();
   void localDbStoresAndLoadsSensorCache();
   void localDbLoadsOnlyBrowsableOfflineStations();
+  void localDbLoadsOnlyOfflineSensorsWithSavedHistory();
   void appControllerLoadsCachedStationsAtStartup();
   void localDbReportsInvalidJson();
   void parsersHandleLocalizedStationsPayload();
@@ -300,6 +301,56 @@ void CoreTests::localDbLoadsOnlyBrowsableOfflineStations() {
   QVERIFY2(err.isEmpty(), qPrintable(err));
   QCOMPARE(offlineStations.size(), 1);
   QCOMPARE(offlineStations.first().toMap().value("id").toInt(), 1002);
+}
+
+void CoreTests::localDbLoadsOnlyOfflineSensorsWithSavedHistory() {
+  QTemporaryDir tempDir;
+  QVERIFY(tempDir.isValid());
+
+  const QString dbPath = tempDir.filePath("db.json");
+  LocalDb db(dbPath);
+  QString err;
+
+  QVERIFY(db.ensureExists(&err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  QVariantList sensors;
+  sensors.push_back(QVariantMap{
+    {"id", 958},
+    {"stationId", 156},
+    {"paramName", "tlenek azotu"},
+    {"paramCode", "NO"},
+    {"displayName", "Nitric oxide"},
+    {"paramFormula", "NO"},
+    {"idParam", 16},
+  });
+  sensors.push_back(QVariantMap{
+    {"id", 959},
+    {"stationId", 156},
+    {"paramName", "ozon"},
+    {"paramCode", "O3"},
+    {"displayName", "Ozone"},
+    {"paramFormula", "O3"},
+    {"idParam", 7},
+  });
+
+  QVERIFY(db.upsertSensorsForStation(156, sensors, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  const QDateTime base(QDate(2026, 3, 1), QTime(0, 0), QTimeZone::UTC);
+  const QVector<MeasurementPoint> pts{
+    {base.addSecs(3600), 11.0},
+    {base.addSecs(7200), 13.5},
+  };
+
+  QVERIFY(db.upsertSeries(959, "O3", pts, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  const auto loaded = db.loadSensorsWithSavedHistoryForStation(156, &err);
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+  QCOMPARE(loaded.size(), 1);
+  QCOMPARE(loaded.first().toMap().value("id").toInt(), 959);
+  QCOMPARE(loaded.first().toMap().value("paramCode").toString(), QString("O3"));
 }
 
 void CoreTests::appControllerLoadsCachedStationsAtStartup() {

@@ -56,7 +56,7 @@ QString buildChartRangeInfoText(const SeriesCoverage& coverage, int requestedDay
   if (requestedDays > availableDays) {
     return "The GIOS online API currently returned only " + coverageText
       + " for this sensor, so larger chart ranges will look the same. "
-      + "Save the series to the local JSON database and use Load Local History for longer comparisons.";
+      + "Save the series to the local JSON database and switch to OFFLINE view for longer local comparisons.";
   }
 
   return "Online data currently covers " + coverageText + ".";
@@ -576,17 +576,30 @@ bool AppController::loadSensorsFromLocalCache(int stationId, const QString& fail
     return false;
   }
 
-  m_sensors = cachedSensors;
+  err.clear();
+  const QVariantList browsableSensors = m_db.loadSensorsWithSavedHistoryForStation(stationId, &err);
+  if (!err.isEmpty()) {
+    setOffline(true);
+    setBanner("Offline: " + failureReason + ". Local sensor history could not be read: " + err);
+    return false;
+  }
+
+  m_sensors = browsableSensors;
   emit sensorsChanged();
   setOffline(true);
 
   if (m_sensors.isEmpty()) {
-    setBanner("Offline: " + failureReason + ". Loaded an empty cached sensor list for station "
-              + QString::number(stationId) + ".");
+    setBanner("Offline: " + failureReason + ". Cached sensors exist for station "
+              + QString::number(stationId)
+              + ", but none of them has saved local history yet.");
   } else {
+    const QString filteredSuffix = m_sensors.size() < cachedSensors.size()
+      ? (" with saved local history (" + QString::number(m_sensors.size())
+         + "/" + QString::number(cachedSensors.size()) + ")")
+      : "";
     setBanner("Offline: " + failureReason + ". Loaded " + QString::number(m_sensors.size())
               + " cached sensor(s) for station " + QString::number(stationId)
-              + " from the local database.");
+              + filteredSuffix + " from the local database.");
   }
   return true;
 }
@@ -649,6 +662,25 @@ void AppController::toggleStationViewMode() {
 
 // Po wyborze stacji czyści poprzedni kontekst i pobiera nowe sensory.
 void AppController::loadSensors(int stationId) {
+  if (m_stationViewOffline) {
+    m_currentStationId = stationId;
+    m_pendingRequest = PendingRequest::None;
+    m_pendingStationId = -1;
+    m_sensors.clear();
+    emit sensorsChanged();
+    setCurrentSensorId(-1);
+    setCurrentParamCode({});
+    clearMapMeasurements();
+
+    if (loadSensorsFromLocalCache(stationId, "using the local offline station view")) {
+      return;
+    }
+
+    setOffline(true);
+    setBanner("Offline: no cached sensors are available for station " + QString::number(stationId));
+    return;
+  }
+
   try {
     // Zmiana stacji oznacza wyczyszczenie poprzedniego wyboru sensora i warstwy mapy.
     m_currentStationId = stationId;
@@ -710,6 +742,25 @@ void AppController::loadOnline(int sensorId, int days) {
   }
 }
 
+// Ładuje serię sensora z lokalnej bazy albo z API zależnie od aktywnego widoku stacji.
+void AppController::loadSensorData(int sensorId, int days) {
+  const int normalizedDays = std::max(1, days);
+
+  setCurrentSensorId(sensorId);
+  const QString selectedParamCode = sensorParamCode(sensorId);
+  if (!selectedParamCode.isEmpty()) {
+    setCurrentParamCode(selectedParamCode);
+  }
+
+  if (m_stationViewOffline) {
+    m_pendingRequest = PendingRequest::None;
+    loadCurrentHistory(normalizedDays);
+    return;
+  }
+
+  loadOnline(sensorId, normalizedDays);
+}
+
 // Zmienia zakres ostatnich N dni dla bieżącej serii bez ponownego pobierania.
 void AppController::applyCurrentChartRange(int days) {
   if (days <= 0) return;
@@ -721,6 +772,10 @@ void AppController::applyCurrentChartRange(int days) {
 
 // Zapisuje ostatnio pobraną serię do lokalnej bazy JSON.
 void AppController::saveCurrentToDb() {
+  if (m_stationViewOffline || m_showingLocalHistory) {
+    setBanner("DB: saving is available only for online measurements currently loaded from the API");
+    return;
+  }
   if (m_currentSensorId < 0 || m_currentSeries.isEmpty()) {
     setBanner("DB: no data to save");
     return;
@@ -863,6 +918,19 @@ void AppController::refreshMapMeasurements(const QVariantList& stationIds, const
   // nie nadpisywały nowszego stanu po szybkim klikaniu użytkownika.
   ++m_mapRequestToken;
   const quint64 token = m_mapRequestToken;
+
+  if (m_stationViewOffline) {
+    if (!m_mapStationMetrics.isEmpty()) {
+      m_mapStationMetrics.clear();
+      emit mapStationMetricsChanged();
+    }
+    if (!m_mapMetricRange.isEmpty()) {
+      m_mapMetricRange.clear();
+      emit mapMetricRangeChanged();
+    }
+    setMapOverlayStatus("Map coloring is available only in ONLINE view.");
+    return;
+  }
 
   QString normalizedParam = paramCode.trimmed();
   if (normalizedParam.isEmpty()) {

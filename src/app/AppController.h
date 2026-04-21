@@ -120,6 +120,11 @@ public:
    */
   Q_INVOKABLE void loadOnline(int sensorId, int days);
   /**
+   * Ładuje dane sensora zgodnie z aktualnym trybem widoku stacji:
+   * z lokalnej bazy w trybie offline albo z API w trybie online.
+   */
+  Q_INVOKABLE void loadSensorData(int sensorId, int days);
+  /**
    * Zmienia zakres dni dla aktualnie wczytanej serii pokazywanej na wykresie.
    */
   Q_INVOKABLE void applyCurrentChartRange(int days);

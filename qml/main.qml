@@ -693,7 +693,7 @@ Window {
 
                     MouseArea {
                       anchors.fill: parent
-                      onClicked: App.loadOnline(s.id, historyDays.value)
+                      onClicked: App.loadSensorData(s.id, historyDays.value)
                     }
                   }
                 }
@@ -702,6 +702,8 @@ Window {
                   text: "Save to Local DB"
                   Layout.fillWidth: true
                   Layout.preferredHeight: 42
+                  enabled: !App.stationViewOffline && App.currentSensorId > 0 && App.chartPoints.length > 0
+                  opacity: enabled ? 1.0 : 0.45
                   onClicked: App.saveCurrentToDb()
                 }
 
@@ -791,14 +793,6 @@ Window {
                     }
                   }
 
-                  GlassButton {
-                    text: "Load Local History"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 42
-                    enabled: App.historyAvailable
-                    opacity: enabled ? 1.0 : 0.45
-                    onClicked: App.loadCurrentHistory(historyDays.value)
-                  }
                 }
 
                 Text {
@@ -823,7 +817,9 @@ Window {
                 Text {
                   Layout.fillWidth: true
                   visible: App.historyAvailable
-                  text: "Local history is available for the selected sensor."
+                  text: App.stationViewOffline
+                        ? "Local history is available. Changing Chart range refreshes the chart automatically."
+                        : "Local history is available for the selected sensor."
                   color: "#8AF5B2"
                   font.pixelSize: 11
                   wrapMode: Text.WordWrap

@@ -47,14 +47,18 @@ cmake --build build-cmake
 5. Optionally type an address in `Address for radius search`, choose `Radius (km)`, and click `Locate`.
 6. Switch to the `Map` tab if you want to inspect stations spatially.
 7. Click a station in the list or on the map to load its available sensors.
+   - in `OFFLINE` view, the sensor list is limited to locally cached sensors that already have saved history
+   - in `ONLINE` view, the full sensor list comes from the API and is cached locally for later use
 8. Choose `Chart range` in days before loading data if you want to limit the visible period on the chart.
 9. Click a sensor to download its measurements and refresh the chart for the selected period.
+   - in `OFFLINE` view, changing `Chart range` updates the locally saved chart automatically
+   - in `ONLINE` view, the chart range changes the visible part of the already loaded online series
 10. Review the `Analysis` card for minimum, maximum, average, trend, and timestamps.
 11. In the chart view, use the mouse wheel to zoom, drag to pan, and double-click to reset the visible range.
 12. Click a chart point to display its exact value and timestamp.
-13. Click `Save to Local DB` to persist the current series in the local JSON database.
-14. Use `Chart range` and `Load Local History` to display previously saved data for the same selected period when needed.
-15. If the API is unavailable, switch back to the `OFFLINE` badge view to keep using locally cached stations and sensors.
+13. Click `Save to Local DB` to persist the current online series in the local JSON database.
+14. The `Save to Local DB` button is disabled in `OFFLINE` view, because locally loaded history is already stored in the JSON database.
+15. If the API is unavailable, switch back to the `OFFLINE` badge view to keep using locally cached stations, sensors, and saved local history.
 
 ## What The Map Status Means
 
@@ -79,6 +83,7 @@ The application is designed to stay usable when the API or local storage fails:
 - `AppController` catches `std::exception` and fallback unknown exceptions around station, sensor, measurement, and local DB actions
 - the local JSON database reports read and write errors through user-facing status text
 - if online access fails, the UI uses only the locally cached offline stations and cached sensors, and still informs the user when saved local history is available
+- offline station browsing hides cached sensors that do not have any saved local measurements yet
 
 ## Multithreading
 

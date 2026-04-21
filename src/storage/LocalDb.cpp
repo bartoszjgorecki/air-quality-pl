@@ -296,6 +296,46 @@ QVariantList LocalDb::loadSensorsForStation(int stationId, QString* err) const {
   return out;
 }
 
+// W trybie offline pokazujemy tylko te sensory, dla których zapisano już lokalne pomiary.
+QVariantList LocalDb::loadSensorsWithSavedHistoryForStation(int stationId, QString* err) const {
+  QVariantList out;
+  if (err) err->clear();
+
+  QString sensorErr;
+  const QVariantList cachedSensors = loadSensorsForStation(stationId, &sensorErr);
+  if (!sensorErr.isEmpty()) {
+    if (err) *err = sensorErr;
+    return out;
+  }
+
+  QFile f(m_path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = "cannot open db.json";
+    return out;
+  }
+
+  const auto doc = readJsonDocument(f, err);
+  if (!doc.isObject()) {
+    if (err && err->isEmpty()) *err = "db.json is not object";
+    return out;
+  }
+
+  QSet<int> sensorIdsWithHistory;
+  const auto measurements = doc.object().value("measurements").toArray();
+  for (const auto& value : measurements) {
+    const int sensorId = value.toObject().value("sensorId").toInt();
+    if (sensorId > 0) sensorIdsWithHistory.insert(sensorId);
+  }
+
+  for (const auto& value : cachedSensors) {
+    const auto sensor = value.toMap();
+    if (!sensorIdsWithHistory.contains(sensor.value("id").toInt())) continue;
+    out.push_back(sensor);
+  }
+
+  return out;
+}
+
 // Aktualizuje zapisane sensory tylko dla wskazanej stacji, bez ruszania innych wpisów.
 bool LocalDb::upsertSensorsForStation(int stationId, const QVariantList& sensors, QString* err) const {
   if (err) err->clear();

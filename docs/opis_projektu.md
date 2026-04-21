@@ -8,9 +8,11 @@ A second important goal of the project is resilience to external failures. Becau
 
 ## 2. General Runtime Flow
 
-The user workflow follows a few clear steps. First, the application downloads the full list of monitoring stations in Poland. That list can then be narrowed in two ways: by a standard text filter or by searching for stations within a selected radius from a typed address. After a station is selected, the application downloads the sensors available at that station. The user then chooses a sensor, for example PM10 or NO2, selects how many recent days should be visible on the chart, and the application downloads the measurement series from the API and presents it in the chosen time window.
+The user workflow follows a few clear steps. At startup, the station list shows locally cached stations from `data/db.json`, so the application can remain usable even without an active internet connection. The user can switch the station source with the `OFFLINE` / `ONLINE` badge in the header or use `Download` to refresh the full monitoring-station list from the GIOS API. The visible station list can then be narrowed in two ways: by a standard text filter or by searching for stations within a selected radius from a typed address. After a station is selected, the application loads the sensors available at that station. In offline mode, the sensor list is intentionally reduced to locally cached sensors that already have saved measurement history. In online mode, the full sensor list is downloaded from the API and cached locally for later offline use.
 
-At the same time the application computes basic statistics for the series: minimum, maximum, average, the number of missing values, and a simple upward or downward trend. The user can also save the currently downloaded series to a local JSON file. This makes it possible to load previously saved history even when the online API is unavailable and still present a chart for the selected period.
+The user then chooses a sensor, for example PM10 or NO2, selects how many recent days should be visible on the chart, and the application presents the measurement series in the chosen time window. In online mode, the data is downloaded from the API and only the selected visible range is shown on the chart. In offline mode, the chart is built from the previously saved local history and changing the chart-range control refreshes the chart automatically, without an additional button.
+
+At the same time the application computes basic statistics for the series: minimum, maximum, average, the number of missing values, and a simple upward or downward trend. The user can also save the currently downloaded series to a local JSON file. This makes it possible to load previously saved history even when the online API is unavailable and still present a chart for the selected period. Saving is intentionally enabled only for online measurements currently loaded from the API, so the user does not accidentally re-save already local offline data.
 
 ## 3. Architecture and Module Split
 
@@ -26,7 +28,7 @@ The `Analyzer` module computes statistics from a vector of measurement points. T
 
 ### 3.3. Local Storage Layer
 
-`LocalDb` manages the local `db.json` file. It is responsible for creating an empty database on first launch, inserting or updating the series for the selected sensor, and loading history for a chosen time range. Writes are performed through `QSaveFile`, which reduces the risk of leaving a corrupted file after an incomplete save. This layer knows nothing about the user interface and only performs data operations.
+`LocalDb` manages the local `db.json` file. It is responsible for creating an empty database on first launch, caching stations and their sensor lists, inserting or updating the series for the selected sensor, and loading history for a chosen time range. It also filters cached offline sensors to those that actually have saved measurements, which keeps the offline interface consistent and prevents the user from opening empty sensor entries. Writes are performed through `QSaveFile`, which reduces the risk of leaving a corrupted file after an incomplete save. This layer knows nothing about the user interface and only performs data operations.
 
 ### 3.4. Network and Parsing Layer
 
@@ -36,11 +38,11 @@ This separation matters for two reasons. First, the parser logic can be tested i
 
 ### 3.5. Application Layer
 
-`AppController` acts as the central coordinator. It connects the QML interface with the REST client, the analyzer, and the local database. It decides when to download stations, when to clear the sensor list, when to save a series, and when to switch the application into offline mode. Because of this, QML stays focused on presentation instead of business logic.
+`AppController` acts as the central coordinator. It connects the QML interface with the REST client, the analyzer, and the local database. It decides when to download stations, when to show cached stations, when to clear the sensor list, when to save a series, and when to switch the application into offline mode. It also coordinates how the chart-range selector behaves for online data versus local history. Because of this, QML stays focused on presentation instead of business logic.
 
 ### 3.6. Interface Layer
 
-The main interface is implemented in `qml/main.qml`. It contains the left column with station and sensor lists and the right side with the chart, map, and data cards. The user can filter stations, run radius-based search, choose the chart range in days, switch between chart and map view, and load local history.
+The main interface is implemented in `qml/main.qml`. It contains the left column with station and sensor lists and the right side with the chart, map, and data cards. The user can filter stations, run radius-based search, choose the chart range in days, switch between chart and map view, and switch between offline and online station sources with the status badge in the header.
 
 The chart is interactive: it supports mouse-wheel zoom, drag-based panning, and double-click reset. Clicking a single chart point also reveals its exact value and timestamp. The map is interactive as well and supports both dragging and zooming.
 
@@ -50,7 +52,7 @@ One of the key project requirements was resilience to failure scenarios. In prac
 
 At the network level, `GiosClient` reports request errors, invalid responses, and timeouts. At the parsing level, malformed JSON results in a `std::runtime_error`, which helps distinguish transport problems from payload-shape problems. In `AppController`, all major download and save operations are wrapped in `try/catch` blocks, so a single failed action does not terminate the entire program.
 
-The local database also reports readable error messages, for example when the file is corrupted or cannot be opened. If online download fails, the application switches to offline mode and informs the user whether local history already exists for the selected sensor. That way the user is not left without feedback and can fall back to previously saved data.
+The local database also reports readable error messages, for example when the file is corrupted or cannot be opened. If online download fails, the application switches to offline mode and informs the user whether local history already exists for the selected sensor. That way the user is not left without feedback and can fall back to previously saved data. The offline mode also avoids showing cached sensors without any saved history, which removes a common source of confusion in the interface.
 
 ## 5. Multithreading and Responsiveness
 
@@ -64,7 +66,7 @@ The map overlay adds one more mechanism: refreshing station colors can trigger m
 
 The project includes unit tests implemented with Qt Test. Three main areas are covered: the statistics analyzer, the local database, and the GIOS response parsers. Parser tests are particularly important because the API is not always uniform and can return different field names in practice. These tests make it easy to verify that the application still recognizes stations, sensors, and measurements after a payload-shape change.
 
-The local database tests verify writes, updates, history reads, and handling of a corrupted JSON file. The analyzer tests verify the correctness of average, minimum, maximum, trend, and coverage calculations. This set does not cover the graphical interface directly, but it gives strong protection to the most important application logic.
+The local database tests verify writes, updates, history reads, station and sensor cache behavior, and handling of a corrupted JSON file. The analyzer tests verify the correctness of average, minimum, maximum, trend, and coverage calculations. This set does not cover the graphical interface directly, but it gives strong protection to the most important application logic.
 
 ## 7. Design Patterns
 

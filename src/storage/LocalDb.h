@@ -44,6 +44,10 @@ public:
    */
   QVariantList loadSensorsForStation(int stationId, QString* err) const;
   /**
+   * Wczytuje tylko te zapisane sensory stacji, dla których istnieje lokalna historia pomiarów.
+   */
+  QVariantList loadSensorsWithSavedHistoryForStation(int stationId, QString* err) const;
+  /**
    * Dodaje lub aktualizuje zapisaną listę sensorów dla wybranej stacji.
    */
   bool upsertSensorsForStation(int stationId, const QVariantList& sensors, QString* err) const;
