@@ -384,16 +384,31 @@ Window {
             Layout.preferredWidth: 120
             Layout.preferredHeight: 34
             radius: 12
-            color: App.offline ? "#22FF7A18" : "#2200FF99"
+            color: App.stationViewOffline ? "#22FF7A18" : "#2200FF99"
             border.color: "#22FFFFFF"
             border.width: 1
 
             Text {
               anchors.centerIn: parent
-              text: App.offline ? "OFFLINE" : "ONLINE"
+              text: App.stationViewOffline ? "OFFLINE" : "ONLINE"
               color: "white"
               font.pixelSize: 12
               font.bold: true
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: App.toggleStationViewMode()
+            }
+
+            ToolTip.visible: badgeHoverHandler.hovered
+            ToolTip.text: App.stationViewOffline
+                          ? "Click to switch to the downloaded API station list."
+                          : "Click to switch to the locally cached station list."
+
+            HoverHandler {
+              id: badgeHoverHandler
             }
           }
         }

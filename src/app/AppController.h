@@ -17,6 +17,7 @@ class AppController : public QObject {
   // reagować na zmiany stanu pochodzące z warstwy C++.
   Q_PROPERTY(QString banner READ banner NOTIFY bannerChanged)
   Q_PROPERTY(bool offline READ offline NOTIFY offlineChanged)
+  Q_PROPERTY(bool stationViewOffline READ stationViewOffline NOTIFY stationViewModeChanged)
   Q_PROPERTY(bool historyAvailable READ historyAvailable NOTIFY historyAvailableChanged)
   Q_PROPERTY(int currentSensorId READ currentSensorId NOTIFY currentSensorIdChanged)
   Q_PROPERTY(QString currentParamCode READ currentParamCode NOTIFY currentParamCodeChanged)
@@ -47,6 +48,10 @@ public:
    */
   bool offline() const { return m_offline; }
   /**
+   * Zwraca informację, czy lista stacji jest aktualnie pokazywana w trybie lokalnym.
+   */
+  bool stationViewOffline() const { return m_stationViewOffline; }
+  /**
    * Zwraca informację, czy dla wybranego sensora istnieje historia lokalna.
    */
   bool historyAvailable() const { return m_historyAvailable; }
@@ -74,7 +79,7 @@ public:
   /**
    * Zwraca aktualnie wczytaną listę stacji.
    */
-  QVariantList stations() const { return m_stations; }
+  QVariantList stations() const { return m_stationViewOffline ? m_offlineStations : m_onlineStations; }
   /**
    * Zwraca aktualnie wczytaną listę sensorów.
    */
@@ -101,6 +106,10 @@ public:
    * Pobiera listę stacji z API.
    */
   Q_INVOKABLE void refreshStations();
+  /**
+   * Przełącza widok listy stacji między lokalną bazą a pełną listą z API.
+   */
+  Q_INVOKABLE void toggleStationViewMode();
   /**
    * Pobiera sensory dla wybranej stacji.
    */
@@ -141,6 +150,7 @@ signals:
   // Sygnały informują QML, że zmieniła się konkretna część stanu aplikacji.
   void bannerChanged();
   void offlineChanged();
+  void stationViewModeChanged();
   void historyAvailableChanged();
   void currentSensorIdChanged();
   void currentParamCodeChanged();
@@ -183,6 +193,10 @@ private:
    */
   void setOffline(bool v);
   /**
+   * Przełącza tryb wyświetlania listy stacji.
+   */
+  void setStationViewOffline(bool v);
+  /**
    * Aktualizuje flagę dostępności historii lokalnej.
    */
   void setHistoryAvailable(bool v);
@@ -195,9 +209,17 @@ private:
    */
   void setCurrentParamCode(QString paramCode);
   /**
+   * Odświeża lokalną listę stacji dostępnych naprawdę w trybie offline.
+   */
+  void refreshOfflineStations();
+  /**
    * Zwraca kod parametru dla podanego sensora, jeśli jest znany.
    */
   QString sensorParamCode(int sensorId) const;
+  /**
+   * Wyszukuje stację po identyfikatorze w znanych listach lokalnych i online.
+   */
+  QVariantMap stationById(int stationId) const;
   /**
    * Buduje czytelną etykietę parametru dla interfejsu.
    */
@@ -254,10 +276,12 @@ private:
 
   QString m_banner;
   bool m_offline = true;
+  bool m_stationViewOffline = true;
   bool m_historyAvailable = false;
 
   // Dane udostępniane bezpośrednio do interfejsu.
-  QVariantList m_stations;
+  QVariantList m_offlineStations;
+  QVariantList m_onlineStations;
   QVariantList m_sensors;
 
   QVariantList m_chartPoints;

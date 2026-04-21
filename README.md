@@ -40,20 +40,21 @@ cmake --build build-cmake
 
 ## Usage Guide
 
-1. Click `Download` to load monitoring stations from the GIOS API.
-2. Use `Filter by city` to narrow the station list locally.
-3. Optionally type an address in `Address for radius search`, choose `Radius (km)`, and click `Locate`.
-4. Switch to the `Map` tab if you want to inspect stations spatially.
-5. Click a station in the list or on the map to load its available sensors.
-6. Choose `Chart range` in days before loading data if you want to limit the visible period on the chart.
-7. Click a sensor to download its measurements and refresh the chart for the selected period.
-8. Review the `Analysis` card for minimum, maximum, average, trend, and timestamps.
-9. In the chart view, use the mouse wheel to zoom, drag to pan, and double-click to reset the visible range.
-10. Click a chart point to display its exact value and timestamp.
-11. Click `Save to Local DB` to persist the current series in the local JSON database.
-12. Use `Chart range` and `Load Local History` to display previously saved data for the same selected period when needed.
-13. At startup, the app shows only locally cached offline stations from `data/db.json`. Click `Download` if you want to replace that view with the full live list from the API.
-14. If the API is unavailable, click `Download` again to keep using locally cached stations, then select a station to load its cached sensors.
+1. At startup, the station list shows only locally cached stations from `data/db.json`.
+2. Click the `OFFLINE` / `ONLINE` badge in the header to switch the visible station list source.
+3. Click `Download` to load the full monitoring-station list from the GIOS API and switch the view to the API list.
+4. Use `Filter by city` to narrow the station list locally.
+5. Optionally type an address in `Address for radius search`, choose `Radius (km)`, and click `Locate`.
+6. Switch to the `Map` tab if you want to inspect stations spatially.
+7. Click a station in the list or on the map to load its available sensors.
+8. Choose `Chart range` in days before loading data if you want to limit the visible period on the chart.
+9. Click a sensor to download its measurements and refresh the chart for the selected period.
+10. Review the `Analysis` card for minimum, maximum, average, trend, and timestamps.
+11. In the chart view, use the mouse wheel to zoom, drag to pan, and double-click to reset the visible range.
+12. Click a chart point to display its exact value and timestamp.
+13. Click `Save to Local DB` to persist the current series in the local JSON database.
+14. Use `Chart range` and `Load Local History` to display previously saved data for the same selected period when needed.
+15. If the API is unavailable, switch back to the `OFFLINE` badge view to keep using locally cached stations and sensors.
 
 ## What The Map Status Means
 

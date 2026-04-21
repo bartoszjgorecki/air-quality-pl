@@ -106,10 +106,9 @@ AppController::AppController(QObject* parent)
     // Jeśli mamy już zapisane stacje offline, pokazujemy je od razu po starcie,
     // nawet zanim użytkownik kliknie przycisk pobierania.
     QString cachedStationsErr;
-    const QVariantList cachedStations = m_db.loadOfflineStations(&cachedStationsErr);
-    if (cachedStationsErr.isEmpty() && !cachedStations.isEmpty()) {
-      m_stations = cachedStations;
-      setBanner("Offline: loaded " + QString::number(m_stations.size())
+    m_offlineStations = m_db.loadOfflineStations(&cachedStationsErr);
+    if (cachedStationsErr.isEmpty() && !m_offlineStations.isEmpty()) {
+      setBanner("Offline: loaded " + QString::number(m_offlineStations.size())
                 + " cached station(s) from the local database at startup.");
     } else if (!cachedStationsErr.isEmpty()) {
       setBanner("Offline: local database ready, but cached stations could not be read: " + cachedStationsErr);
@@ -123,7 +122,8 @@ AppController::AppController(QObject* parent)
   // i zamienia je na stan bezpośrednio używany przez interfejs.
   connect(&m_gios, &GiosClient::stationsReady, this, [this](QVariantList s) {
     try {
-      m_stations = std::move(s);
+      m_onlineStations = std::move(s);
+      setStationViewOffline(false);
       emit stationsChanged();
       setOffline(false);
       m_pendingRequest = PendingRequest::None;
@@ -155,18 +155,16 @@ AppController::AppController(QObject* parent)
       bool cacheOk = true;
 
       if (stationId > 0) {
-        QVariantMap stationToStore;
-        for (const auto& stationValue : m_stations) {
-          const auto station = stationValue.toMap();
-          if (station.value("id").toInt() != stationId) continue;
-          stationToStore = station;
-          break;
-        }
+        const QVariantMap stationToStore = stationById(stationId);
 
         if (!stationToStore.isEmpty() && !m_db.upsertStation(stationToStore, &cacheErr)) {
           cacheOk = false;
         } else if (!m_db.upsertSensorsForStation(stationId, m_sensors, &cacheErr)) {
           cacheOk = false;
+        }
+
+        if (cacheOk) {
+          refreshOfflineStations();
         }
       }
 
@@ -280,6 +278,14 @@ void AppController::setOffline(bool v) {
   emit offlineChanged();
 }
 
+// Przełącza źródło listy stacji między lokalną bazą a pełną listą z API.
+void AppController::setStationViewOffline(bool v) {
+  if (m_stationViewOffline == v) return;
+  m_stationViewOffline = v;
+  emit stationViewModeChanged();
+  emit stationsChanged();
+}
+
 // Zapamiętuje, czy dla bieżącego sensora mamy lokalną historię w JSON.
 void AppController::setHistoryAvailable(bool v) {
   if (m_historyAvailable == v) return;
@@ -295,11 +301,38 @@ void AppController::setCurrentSensorId(int sensorId) {
   refreshHistoryAvailability();
 }
 
+// Odświeża lokalną listę stacji, które mają sensowny zestaw danych do pracy offline.
+void AppController::refreshOfflineStations() {
+  QString err;
+  const QVariantList offlineStations = m_db.loadOfflineStations(&err);
+  if (!err.isEmpty()) return;
+  if (m_offlineStations == offlineStations) return;
+  m_offlineStations = offlineStations;
+  if (m_stationViewOffline) emit stationsChanged();
+}
+
 // Aktualizuje kod parametru, np. PM10 albo NO2, dla dalszej pracy wykresu i mapy.
 void AppController::setCurrentParamCode(QString paramCode) {
   if (m_currentParamCode == paramCode) return;
   m_currentParamCode = std::move(paramCode);
   emit currentParamCodeChanged();
+}
+
+// Wyszukuje stację o podanym identyfikatorze najpierw w liście online, a potem lokalnej.
+QVariantMap AppController::stationById(int stationId) const {
+  if (stationId <= 0) return {};
+
+  for (const auto& stationValue : m_onlineStations) {
+    const auto station = stationValue.toMap();
+    if (station.value("id").toInt() == stationId) return station;
+  }
+
+  for (const auto& stationValue : m_offlineStations) {
+    const auto station = stationValue.toMap();
+    if (station.value("id").toInt() == stationId) return station;
+  }
+
+  return {};
 }
 
 // Szuka w aktualnej liście sensorów kodu parametru dla podanego identyfikatora sensora.
@@ -520,10 +553,10 @@ bool AppController::loadStationsFromLocalCache(const QString& failureReason) {
     return false;
   }
 
-  m_stations = cachedStations;
-  emit stationsChanged();
+  m_offlineStations = cachedStations;
+  setStationViewOffline(true);
   setOffline(true);
-  setBanner("Offline: " + failureReason + ". Loaded " + QString::number(m_stations.size())
+  setBanner("Offline: " + failureReason + ". Loaded " + QString::number(m_offlineStations.size())
             + " station(s) from the local database.");
   return true;
 }
@@ -563,6 +596,7 @@ void AppController::refreshStations() {
   try {
     m_pendingRequest = PendingRequest::Stations;
     m_pendingStationId = -1;
+    setStationViewOffline(false);
     setBanner("Online: downloading stations...");
     m_gios.fetchStations();
   } catch (const std::exception& ex) {
@@ -582,6 +616,35 @@ void AppController::refreshStations() {
     setOffline(true);
     setBanner("Offline: unknown exception while loading stations");
   }
+}
+
+// Przełącza badge źródła stacji między listą lokalną a listą online.
+void AppController::toggleStationViewMode() {
+  if (m_stationViewOffline) {
+    if (m_onlineStations.isEmpty()) {
+      refreshStations();
+      return;
+    }
+
+    setStationViewOffline(false);
+    setBanner("Online view: showing the downloaded station list from the API.");
+  } else {
+    refreshOfflineStations();
+    setStationViewOffline(true);
+    if (m_offlineStations.isEmpty()) {
+      setBanner("Offline view: no locally cached stations are available yet.");
+    } else {
+      setBanner("Offline view: showing " + QString::number(m_offlineStations.size())
+                + " locally cached station(s) from the JSON database.");
+    }
+  }
+
+  m_currentStationId = -1;
+  m_sensors.clear();
+  emit sensorsChanged();
+  setCurrentSensorId(-1);
+  setCurrentParamCode({});
+  clearMapMeasurements();
 }
 
 // Po wyborze stacji czyści poprzedni kontekst i pobiera nowe sensory.
