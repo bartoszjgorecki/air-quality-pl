@@ -39,15 +39,17 @@ target_link_libraries(air_quality_pl PRIVATE
 # Testy jednostkowe obejmują parsery, lokalną bazę i analizator statystyk.
 qt_add_executable(air_quality_pl_tests
   tests/test_core.cpp
+  src/app/AppController.cpp
   src/storage/LocalDb.cpp
   src/analysis/Analyzer.cpp
+  src/net/GiosClient.cpp
   src/net/GiosParsers.cpp
 )
 
 target_include_directories(air_quality_pl_tests PRIVATE src)
 
 target_link_libraries(air_quality_pl_tests PRIVATE
-  Qt6::Core Qt6::Test
+  Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Test
 )
 
 add_test(NAME air_quality_pl_tests COMMAND air_quality_pl_tests)

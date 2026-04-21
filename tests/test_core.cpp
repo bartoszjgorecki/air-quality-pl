@@ -1,11 +1,13 @@
 #include <QtTest>
 #include <QFile>
 #include <QJsonDocument>
+#include <QDir>
 #include <QTimeZone>
 
 #include <stdexcept>
 
 #include "analysis/Analyzer.h"
+#include "app/AppController.h"
 #include "net/GiosParsers.h"
 #include "storage/LocalDb.h"
 
@@ -35,6 +37,7 @@ private slots:
   void localDbLoadsFullSensorHistory();
   void localDbStoresAndLoadsStationCache();
   void localDbStoresAndLoadsSensorCache();
+  void appControllerLoadsCachedStationsAtStartup();
   void localDbReportsInvalidJson();
   void parsersHandleLocalizedStationsPayload();
   void parsersHandleLocalizedSensorsPayload();
@@ -252,6 +255,43 @@ void CoreTests::localDbStoresAndLoadsSensorCache() {
   const auto missing = db.loadSensorsForStation(999, &err);
   QVERIFY(missing.isEmpty());
   QVERIFY(!err.isEmpty());
+}
+
+void CoreTests::appControllerLoadsCachedStationsAtStartup() {
+  QTemporaryDir tempDir;
+  QVERIFY(tempDir.isValid());
+
+  const QString originalCurrentPath = QDir::currentPath();
+  QVERIFY(QDir().mkpath(tempDir.filePath("data")));
+
+  LocalDb db(tempDir.filePath("data/db.json"));
+  QString err;
+  QVERIFY(db.ensureExists(&err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+
+  QVariantList stations;
+  stations.push_back(QVariantMap{
+    {"id", 501},
+    {"name", "Poznan, Polanka"},
+    {"city", "Poznan"},
+    {"province", "WIELKOPOLSKIE"},
+    {"address", "Polanka 3"},
+    {"lat", 52.404f},
+    {"lon", 16.953f},
+  });
+
+  QVERIFY(db.replaceStations(stations, &err));
+  QVERIFY2(err.isEmpty(), qPrintable(err));
+  QVERIFY(QDir::setCurrent(tempDir.path()));
+
+  {
+    AppController controller;
+    QCOMPARE(controller.stations().size(), 1);
+    QCOMPARE(controller.stations().first().toMap().value("id").toInt(), 501);
+    QVERIFY(controller.offline());
+  }
+
+  QVERIFY(QDir::setCurrent(originalCurrentPath));
 }
 
 void CoreTests::localDbReportsInvalidJson() {

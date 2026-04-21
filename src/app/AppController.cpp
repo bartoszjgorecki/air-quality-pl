@@ -95,6 +95,18 @@ AppController::AppController(QObject* parent)
   } else {
     setOffline(true);
     setBanner("Offline: local database ready");
+
+    // Jeśli mamy już zapisane stacje, pokazujemy je od razu po starcie,
+    // nawet zanim użytkownik kliknie przycisk pobierania.
+    QString cachedStationsErr;
+    const QVariantList cachedStations = m_db.loadStations(&cachedStationsErr);
+    if (cachedStationsErr.isEmpty() && !cachedStations.isEmpty()) {
+      m_stations = cachedStations;
+      setBanner("Offline: loaded " + QString::number(m_stations.size())
+                + " cached station(s) from the local database at startup.");
+    } else if (!cachedStationsErr.isEmpty()) {
+      setBanner("Offline: local database ready, but cached stations could not be read: " + cachedStationsErr);
+    }
   }
   refreshHistoryAvailability();
   setMapOverlayStatus("Select a sensor to color the map.");
