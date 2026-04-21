@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/26928299/README.md)
 # Air Quality Monitor
 
 Air Quality Monitor is a desktop C++/Qt application for browsing Polish air-quality stations, downloading measurements from the GIOS REST API, saving them in a local JSON database, and presenting both charts and map-based views.

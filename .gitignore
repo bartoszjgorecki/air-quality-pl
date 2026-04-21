@@ -1,0 +1,17 @@
+.DS_Store
+
+build/
+build-audit/
+build-cmake/
+cmake-build*/
+compile_commands.json
+
+data/db.json
+debug/
+
+docs/html/
+docs/latex/
+docs/doxygen-warnings.log
+
+*.user
+*.autosave
