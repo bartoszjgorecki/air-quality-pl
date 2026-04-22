@@ -1,3 +1,6 @@
+# Run with: doxygen Doxyfile
+# Or use: ./generate_docs.sh
+# Do not execute this file directly in the shell.
 PROJECT_NAME = "Air Quality Monitor"
 PROJECT_BRIEF = "Qt desktop application for air quality stations, charts, offline history, and map overlays."
 OUTPUT_DIRECTORY = docs
@@ -21,6 +24,6 @@ SOURCE_BROWSER = YES
 INLINE_SOURCES = NO
 GENERATE_TREEVIEW = YES
 INPUT = README.md docs/mainpage.md docs/opis_projektu.md src
-FILE_PATTERNS = *.h *.md
+FILE_PATTERNS = *.h *.cpp *.md
 GENERATE_HTML = YES
 GENERATE_LATEX = NO

@@ -155,4 +155,12 @@ If Doxygen is installed:
 doxygen Doxyfile
 ```
 
+or use the helper script:
+
+```bash
+./generate_docs.sh
+```
+
+Do not run `./Doxyfile` or `sh Doxyfile`. `Doxyfile` is a Doxygen configuration file, not a shell script, and running it directly causes shell errors such as `GENERATE_LATEX: command not found`.
+
 The generated HTML documentation is written to `docs/html`.
